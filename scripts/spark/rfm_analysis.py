@@ -5,62 +5,41 @@ from pyspark.sql.window import Window
 
 def main():
     postgres_host = os.getenv("POSTGRES_HOST", "postgres")
-    postgres_db = os.getenv("POSTGRES_DB", "ecommerce_analytics")
+    postgres_db = os.getenv("POSTGRES_DB", "postgres")
     postgres_user = os.getenv("POSTGRES_USER", "postgres")
     postgres_password = os.getenv("POSTGRES_PASSWORD", "root")
     jdbc_url = f"jdbc:postgresql://{postgres_host}:5432/{postgres_db}"
 
     spark = SparkSession.builder \
         .appName("EcommerceRFMAnalysis") \
-        .config("spark.hadoop.fs.s3a.endpoint", "http://ecommerce-minio:9000") \
-        .config("spark.hadoop.fs.s3a.access.key", "minioadmin") \
-        .config("spark.hadoop.fs.s3a.secret.key", "minioadminpassword") \
-        .config("spark.hadoop.fs.s3a.path.style.access", "true") \
-        .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-        .config("spark.sql.files.ignoreMissingFiles", "true") \
         .getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")
 
-    print("从 MinIO（数据湖）读取原始事件")
+    print("Чтение заказов из PostgreSQL...")
     try:
-        events_df = spark.read.json("s3a://raw-events/events/*/*.json")
+        orders_df = spark.read \
+            .format("jdbc") \
+            .option("url", jdbc_url) \
+            .option("dbtable", "orders") \
+            .option("user", postgres_user) \
+            .option("password", postgres_password) \
+            .option("driver", "org.postgresql.Driver") \
+            .load()
     except Exception as e:
-        print(f"从 MinIO 读取数据时出错(文件夹为空或存储桶缺失): {e}")
+        print(f"Ошибка при чтении из PostgreSQL: {e}")
         spark.stop()
         return
 
-    if events_df.rdd.isEmpty():
-        print("MinIO 没有文件需要处理。退出。")
-        spark.stop()
-        return
+    orders_df = orders_df.withColumn("created_at", F.to_timestamp(F.col("created_at")))
 
-    events_df = events_df.withColumn("timestamp", F.to_timestamp(F.col("timestamp")))
+    max_timestamp = orders_df.select(F.max("created_at")).collect()[0][0]
 
-    print("执行 Data Quality Check")
-    null_users = events_df.filter(F.col("user_id").isNull()).count()
-    invalid_prices = events_df.filter(F.col("price") < 0).count()
-
-    print(f"[DATA QUALITY] 死用户（null）：{null_users}，负价格： {invalid_prices}")
-
-    if null_users > 0 or invalid_prices > 0:
-        spark.stop()
-        raise ValueError(f"Data Quality Failed! Null users: {null_users}, Invalid prices: {invalid_prices}")
-
-    buys_df = events_df.filter((F.col("action") == "buy") & F.col("user_id").isNotNull())
-
-    if buys_df.count() == 0:
-        print("没有“购买”事件 'buy' 完成")
-        spark.stop()
-        return
-
-    max_timestamp = buys_df.select(F.max("timestamp")).collect()[0][0]
-
-    print("计算 R, F, M")
-    rfm_raw = buys_df.groupBy("user_id").agg(
-        F.datediff(F.lit(max_timestamp), F.max("timestamp")).alias("recency_days"),
-        F.count("event_id").alias("frequency"),
-        F.sum("price").alias("monetary")
+    print("Расчет RFM метрик...")
+    rfm_raw = orders_df.groupBy("user_id").agg(
+        F.datediff(F.lit(max_timestamp), F.max("created_at")).alias("recency_days"),
+        F.count("id").alias("frequency"),
+        F.sum("total_amount").alias("monetary")
     )
 
     r_window = Window.orderBy(F.col("recency_days").desc())
@@ -81,7 +60,7 @@ def main():
          .otherwise("Lost / Hibernating")
     ).withColumn("calculated_at", F.current_timestamp())
 
-    print("将结果写入 PostgreSQL (user_rfm_segments)")
+    print("Запись результатов в PostgreSQL (таблица user_rfm_segments)...")
     rfm_segmented.write \
         .format("jdbc") \
         .option("url", jdbc_url) \
@@ -92,7 +71,7 @@ def main():
         .mode("overwrite") \
         .save()
 
-    print("MinIO的RFM分析已成功完成！")
+    print("RFM-анализ успешно завершен!")
     spark.stop()
 
 if __name__ == "__main__":

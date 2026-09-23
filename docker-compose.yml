@@ -102,10 +102,12 @@ services:
       - kafka
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      KAFKA_TOPIC: ecommerce-events
+      KAFKA_TOPIC: order-events
 
   flink-processor:
-    image: ecommerce-flink:latest
+    build:
+      context: ./scripts/flink
+      dockerfile: Dockerfile
     container_name: flink-processor
     depends_on:
       - kafka
@@ -189,5 +191,22 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend
+    depends_on:
+      - postgres
+    ports:
+      - "8000:8000"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: root
+
 volumes:
   minio_data:
