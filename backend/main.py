@@ -3,9 +3,11 @@ import hashlib
 import hmac
 import secrets
 from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
 
 app = FastAPI(title="Food Delivery & Analytics API", version="1.0.0")
 
@@ -317,6 +319,218 @@ def login_user(
         raise HTTPException(
             status_code=500,
             detail=f"Login error: {str(e)}"
+        )
+
+    finally:
+        cursor.close()
+        conn.close()
+
+class OrderItemRequest(BaseModel):
+    dish_id: int
+    quantity: int
+
+
+class OrderRequest(BaseModel):
+    user_id: int
+    restaurant_id: int
+    delivery_address: str
+    items: list[OrderItemRequest]
+
+@app.post("/orders")
+def create_order(order_request: OrderRequest):
+    user_id = order_request.user_id
+    restaurant_id = order_request.restaurant_id
+    delivery_address = order_request.delivery_address
+    items = order_request.items
+    
+    if not delivery_address.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Delivery address is required"
+        )
+
+    if not items:
+        raise HTTPException(
+            status_code=400,
+            detail="Order must contain at least one item"
+        )
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Check user
+        cursor.execute(
+            """
+            SELECT id
+            FROM public.users
+            WHERE id = %s;
+            """,
+            (user_id,)
+        )
+
+        if not cursor.fetchone():
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+
+        # Check restaurant
+        cursor.execute(
+            """
+            SELECT id
+            FROM public.restaurants
+            WHERE id = %s AND is_active = true;
+            """,
+            (restaurant_id,)
+        )
+
+        if not cursor.fetchone():
+            raise HTTPException(
+                status_code=404,
+                detail="Restaurant not found"
+            )
+
+        subtotal = 0
+        prepared_items = []
+
+        for item in items:
+            dish_id = item.dish_id
+            quantity = item.quantity
+
+            if quantity <= 0:
+                raise HTTPException(
+                    
+                    status_code=400,
+                    detail="Quantity must be greater than 0"
+                )
+
+            cursor.execute(
+                """
+                SELECT id, restaurant_id, price, is_available
+                FROM public.dishes
+                WHERE id = %s;
+                """,
+                (dish_id,)
+            )
+
+            dish = cursor.fetchone()
+
+            if not dish:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Dish {dish_id} not found"
+                )
+
+            if dish["restaurant_id"] != restaurant_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Dish {dish_id} does not belong to this restaurant"
+                )
+
+            if not dish["is_available"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Dish {dish_id} is not available"
+                )
+
+            unit_price = float(dish["price"])
+            item_subtotal = unit_price * quantity
+
+            subtotal += item_subtotal
+
+            prepared_items.append({
+                "dish_id": dish_id,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "subtotal": item_subtotal
+            })
+
+        delivery_fee = 2.99
+        discount = 0
+        total_amount = subtotal + delivery_fee - discount
+
+        # Create order
+        cursor.execute(
+            """
+            INSERT INTO public.orders
+                (
+                    user_id,
+                    restaurant_id,
+                    status,
+                    subtotal,
+                    delivery_fee,
+                    discount,
+                    total_amount,
+                    delivery_address
+                )
+            VALUES
+                (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING
+                id,
+                user_id,
+                restaurant_id,
+                status,
+                subtotal,
+                delivery_fee,
+                discount,
+                total_amount,
+                delivery_address,
+                created_at;
+            """,
+            (
+                user_id,
+                restaurant_id,
+                "pending",
+                subtotal,
+                delivery_fee,
+                discount,
+                total_amount,
+                delivery_address.strip()
+            )
+        )
+
+        order = cursor.fetchone()
+
+        # Create order items
+        for item in prepared_items:
+            cursor.execute(
+                """
+                INSERT INTO public.order_items
+                    (
+                        order_id,
+                        dish_id,
+                        quantity,
+                        unit_price,
+                        subtotal
+                    )
+                VALUES
+                    (%s, %s, %s, %s, %s);
+                """,
+                (
+                    order["id"],
+                    item["dish_id"],
+                    item["quantity"],
+                    item["unit_price"],
+                    item["subtotal"]
+                )
+            )
+
+        return {
+            "message": "Order created successfully",
+            "order": order,
+            "items": prepared_items
+        }
+
+    except HTTPException:
+        conn.rollback()
+        raise
+
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Order creation error: {str(e)}"
         )
 
     finally:

@@ -476,24 +476,20 @@ function escapeHtml(value) {
 }
 
 
+function checkout() {
+    window.location.href = "checkout.html";
+}
+
+
 /* =========================
    CHECKOUT
    ========================= */
 
-document
-    .getElementById(
-        "checkoutButton"
-    )
-    .addEventListener(
-        "click",
-        () => {
+const checkoutButton = document.getElementById("checkoutButton");
 
-            alert(
-                "Checkout will be connected after registration and login are implemented."
-            );
-
-        }
-    );
+if (checkoutButton) {
+    checkoutButton.addEventListener("click", checkout);
+}
 
 
 /* =========================
