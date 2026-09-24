@@ -208,5 +208,16 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: root
 
+  frontend:
+    image: python:3.12-slim
+    container_name: meituan_frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    command: python -m http.server 80
+    ports:
+      - "3080:80"
+    restart: always
+
 volumes:
   minio_data:
