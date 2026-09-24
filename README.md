@@ -1,81 +1,145 @@
-# E-Commerce Big Data Analytics Platform
+# E-Commerce Big Data Analytics
 
-## 项目简介
+一个基于 Docker 的电商大数据分析项目，主要用于学习和实践 Kafka、Flink、Spark、Airflow、PostgreSQL 等大数据技术。
 
-处理与分析电商实时及定时数据的工程项目。平台收集用户行为事件，提供实时数据监控，并完成 RFM 客户分群分析。
+## 项目功能
 
-## 核心组件
+项目主要包括：
 
-Generator (Python)
-持续生成模拟用户事件与交易数据的服务。
+* 模拟生成用户和订单数据
+* Kafka 接收实时订单数据
+* Flink 实时处理订单数据
+* PostgreSQL 保存业务数据和分析结果
+* Spark 进行批量数据处理
+* Airflow 定时执行数据处理任务
+* MinIO 保存原始数据
+* Grafana 显示数据监控
+* Backend 提供 API
+* Frontend 提供简单的数据展示页面
 
-Apache Kafka
-用于接收与缓冲数据流的消息代理。
+## 主要技术
 
-Apache Flink
-实时流处理服务，直接计算来自 Kafka 的核心业务指标。
+* Python
+* Apache Kafka
+* Apache Flink
+* Apache Spark
+* Apache Airflow
+* PostgreSQL
+* Redis
+* MinIO
+* Grafana
+* FastAPI / Backend
+* HTML / CSS / JavaScript / Frontend
+* Docker & Docker Compose
 
-MinIO (Data Lake)
-对象存储服务，作为 S3 兼容的数据湖存储原始与中间数据。
+## 项目结构
 
-Grafana
-展示实时销售额与用户活跃度的监控仪表盘。
+```text
+ecommerce-bigdata-analytics/
+├── backend/              # 后端 API
+├── frontend/             # 前端页面
+├── dags/                 # Airflow DAG
+├── scripts/
+│   ├── flink/            # Flink 相关代码
+│   ├── spark/            # Spark 相关代码
+│   ├── generator/        # 模拟数据生成
+│   └── sql/              # SQL 初始化文件
+├── docker-compose.yml
+└── README.md
+```
 
+## 数据流程
+
+```text
+数据生成器
+    ↓
+  Kafka
+    ↓
+  Flink
+    ↓
 PostgreSQL
-存储历史交易数据与最终分析结果的数据集市。
+    ↓
+ Backend
+    ↓
+ Frontend
+```
 
-Apache Airflow 与 PySpark
-工作流调度器与批处理引擎，每日定时触发从 MinIO 到 PostgreSQL 的 RFM 客户分群计算。
+批处理部分：
 
-Telegram Alerts
-任务异常监控通知系统，在 Airflow Task 执行失败或重试时向 Telegram Bot 实时发送告警。
+```text
+MinIO
+  ↓
+Airflow
+  ↓
+Spark
+  ↓
+PostgreSQL
+```
 
-## 部署与运行
+## 启动项目
 
-先决条件
+需要安装 Docker 和 Docker Compose。
 
-首次构建和运行 Docker 容器之前，需要将所需的 JAR 库下载到 `scripts/spark/` 文件夹：
+克隆项目：
 
-1. AWS / S3 (MinIO) connector
-curl -fSL [https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar](https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar) -O
-curl -fSL [https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar](https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar) -O
-
-2. PostgreSQL JDBC driver
-curl -fSL [https://jdbc.postgresql.org/download/postgresql-42.6.0.jar](https://jdbc.postgresql.org/download/postgresql-42.6.0.jar) -O
-
-## 设置 Telegram 通知（可选）
-
-要在 Telegram 中接收有关 Airflow DAG 故障和执行状态的通知，请执行以下操作：
-
-1. 使用 [@BotFather](https://t.me/BotFather) 创建一个机器人并获取机器人令牌。
-
-2. 查找您的聊天 ID（例如，使用 [@userinfobot](https://t.me/userinfobot)）。
-
-3. 将获取的数据输入到 `dags/telegram_alerts.py` 文件中：
-
-TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
-
-TELEGRAM_CHAT_ID = "YOUR_TELEGRAM_CHAT_ID"
-
-## 克隆与启动
-
+```bash
 git clone https://github.com/imash1999/ecommerce-bigdata-analytics.git
 cd ecommerce-bigdata-analytics
+```
+
+启动所有服务：
+
+```bash
 docker compose up -d --build
+```
 
-## 强制刷新 Airflow DAG
+查看容器：
 
-若 Web 界面未显示 DAG：
+```bash
+docker compose ps
+```
 
-docker exec -it airflow_webserver airflow dags reserialize
+## 访问地址
 
-## 手动触发任务
+| 服务       | 地址                    |
+| -------- | --------------------- |
+| Frontend | http://localhost:3080 |
+| Backend  | http://localhost:8000 |
+| Airflow  | http://localhost:8085 |
+| Flink    | http://localhost:8081 |
+| Grafana  | http://localhost:3000 |
+| MinIO    | http://localhost:9001 |
 
-docker exec -it airflow_webserver airflow dags trigger rfm_segmentation_daily
+## 数据库
 
-## 访问入口
+项目使用 PostgreSQL 保存业务数据和实时分析结果。
 
-Airflow: http://localhost:8085
-Grafana: http://localhost:3000
-Flink: http://localhost:8081
-MinIO Console: http://localhost:9001
+项目数据库：
+
+```text
+postgres
+```
+
+Airflow 使用单独的数据库：
+
+```text
+ecommerce_analytics
+```
+
+PostgreSQL 数据使用 Docker volume 保存，重新启动容器不会自动删除数据库数据。
+
+## 停止项目
+
+```bash
+docker compose down
+```
+
+再次启动：
+
+```bash
+docker compose up -d
+```
+
+## 说明
+
+这个项目主要用于学习和实践大数据技术，目前还在不断完善中。
