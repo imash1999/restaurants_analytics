@@ -325,6 +325,98 @@ def login_user(
         cursor.close()
         conn.close()
 
+        
+@app.get("/users/{user_id}/orders")
+def get_user_orders(user_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Check user
+        cursor.execute(
+            """
+            SELECT id, username, email, name
+            FROM public.users
+            WHERE id = %s;
+            """,
+            (user_id,)
+        )
+
+        user = cursor.fetchone()
+
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+
+        # Get orders
+        cursor.execute(
+            """
+            SELECT
+                o.id,
+                o.user_id,
+                o.restaurant_id,
+                r.name AS restaurant_name,
+                r.address AS restaurant_address,
+                o.status,
+                o.subtotal,
+                o.delivery_fee,
+                o.discount,
+                o.total_amount,
+                o.delivery_address,
+                o.created_at,
+                o.updated_at
+            FROM public.orders o
+            JOIN public.restaurants r
+                ON r.id = o.restaurant_id
+            WHERE o.user_id = %s
+            ORDER BY o.created_at DESC;
+            """,
+            (user_id,)
+        )
+
+        orders = cursor.fetchall()
+
+        for order in orders:
+            cursor.execute(
+                """
+                SELECT
+                    oi.dish_id,
+                    d.name AS dish_name,
+                    oi.quantity,
+                    oi.unit_price,
+                    oi.subtotal
+                FROM public.order_items oi
+                JOIN public.dishes d
+                    ON d.id = oi.dish_id
+                WHERE oi.order_id = %s
+                ORDER BY oi.id;
+                """,
+                (order["id"],)
+            )
+
+            order["items"] = cursor.fetchall()
+
+        return {
+            "user": user,
+            "orders": orders
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load orders: {str(e)}"
+        )
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
 class OrderItemRequest(BaseModel):
     dish_id: int
     quantity: int
