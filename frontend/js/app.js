@@ -137,7 +137,19 @@ function createRestaurantCard(restaurant) {
     card.innerHTML = `
 
         <div class="restaurant-image">
-            ${getRestaurantEmoji(category)}
+            ${
+                restaurant.image_url
+                    ? `<img
+                        src="${escapeHtml(restaurant.image_url)}"
+                        alt="${escapeHtml(restaurant.name)}"
+                        loading="lazy"
+                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                       >
+                       <span class="restaurant-image-fallback" style="display:none;">
+                           ${getRestaurantEmoji(category)}
+                       </span>`
+                    : getRestaurantEmoji(category)
+            }
         </div>
 
         <div class="restaurant-content">

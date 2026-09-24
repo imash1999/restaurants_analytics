@@ -435,7 +435,19 @@ function createDishCard(dish) {
         </div>
 
         <div class="dish-image">
-            ${getDishEmoji(dish.name)}
+            ${
+                dish.image_url
+                    ? `<img
+                        src="${escapeHtml(dish.image_url)}"
+                        alt="${escapeHtml(dish.name)}"
+                        loading="lazy"
+                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                       >
+                       <span class="dish-image-fallback" style="display:none;">
+                           ${getDishEmoji(dish.name)}
+                       </span>`
+                    : getDishEmoji(dish.name)
+            }
         </div>
 
     `;

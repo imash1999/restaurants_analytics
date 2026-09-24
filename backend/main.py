@@ -96,7 +96,7 @@ def get_restaurants(limit: int = 20, offset: int = 0):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            SELECT id, source_id, name, category, price_range, rating, rating_count, address, zip_code
+            SELECT id, source_id, name, category, price_range, rating, rating_count, address, zip_code, image_url
             FROM public.restaurants
             ORDER BY id
             LIMIT %s OFFSET %s;
