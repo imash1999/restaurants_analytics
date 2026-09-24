@@ -33,9 +33,12 @@ services:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: flink-jobmanager
+        rest.address: flink-jobmanager
+        rest.bind-address: 0.0.0.0
     volumes:
       - ./scripts/flink/lib:/opt/flink/usrlib
       - ./scripts/flink/submit.sql:/opt/flink/submit.sql
+      - ./scripts/flink/lib/flink-sql-connector-kafka-3.0.0-1.17.jar:/opt/flink/lib/flink-sql-connector-kafka-3.0.0-1.17.jar
 
   flink-taskmanager:
     image: flink:1.17-java11
@@ -50,6 +53,9 @@ services:
         taskmanager.numberOfTaskSlots: 4
     volumes:
       - ./scripts/flink/lib:/opt/flink/usrlib
+      - ./scripts/flink/lib/flink-sql-connector-kafka-3.0.0-1.17.jar:/opt/flink/lib/flink-sql-connector-kafka-3.0.0-1.17.jar
+      - ./scripts/flink/lib/flink-connector-jdbc-3.1.0-1.17.jar:/opt/flink/lib/flink-connector-jdbc-3.1.0-1.17.jar
+      - ./scripts/flink/lib/postgresql-42.6.0.jar:/opt/flink/lib/postgresql-42.6.0.jar
 
   redis:
     image: redis:7-alpine
@@ -67,6 +73,7 @@ services:
       POSTGRES_PASSWORD: root
       POSTGRES_DB: ecommerce_analytics
     volumes:
+      - postgres_data:/var/lib/postgresql/data
       - ./scripts/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   spark-master:
@@ -116,9 +123,13 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       POSTGRES_HOST: postgres
-      POSTGRES_DB: ecommerce_analytics
+      POSTGRES_DB: postgres
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: root
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        rest.address: flink-jobmanager
+        rest.bind-address: 0.0.0.0
 
   grafana:
     image: grafana/grafana:latest
@@ -220,4 +231,5 @@ services:
     restart: always
 
 volumes:
+  postgres_data:
   minio_data:
